@@ -9,7 +9,8 @@ from PIL import Image
 from pipeline import (
     Pipeline, PipelineStage, CharacterAttributes, ProcessingResult,
     InputLoader, TagParser, CLIPAnalyzer, BLIP2Analyzer, RLOptimizer, 
-    AttributeFusion, DatabaseStorage, DatasetItem
+    AttributeFusion, DatabaseStorage, DatasetItem, EdgeCaseHandler,
+    ImagePreprocessor, DistributedProcessor, AdvancedCacheManager
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -65,6 +66,20 @@ class CharacterExtractionPipeline:
                 'fusion_strategy': 'confidence_weighted'
             }))
             
+            # Initialize scalability components
+            self.edge_case_handler = EdgeCaseHandler(self.config.get('edge_case_handler', {}))
+            self.preprocessor = ImagePreprocessor(self.config.get('image_preprocessor', {}))
+            self.cache_manager = AdvancedCacheManager(self.config.get('cache_manager', {}))
+            
+            # Initialize distributed processor if available
+            try:
+                self.distributed_processor = DistributedProcessor(self.config.get('distributed_processor', {}))
+                self.distributed_available = True
+            except ImportError:
+                self.distributed_processor = None
+                self.distributed_available = False
+                self.logger.info("Distributed processing not available")
+            
             self.logger.info("All components initialized successfully")
             
         except Exception as e:
@@ -97,9 +112,24 @@ class CharacterExtractionPipeline:
                 pil_image = image
                 image_path = None
             
-            # Create input data
+            # Preprocess image and check edge cases
+            preprocess_result = self.preprocessor.preprocess_image(pil_image)
+            if preprocess_result['should_skip']:
+                self.logger.info(f"Skipping image: {preprocess_result['preprocessing_info'].get('skip_reason', 'quality issues')}")
+                return CharacterAttributes()
+            
+            # Use preprocessed image
+            processed_image = preprocess_result['processed_image']
+            
+            # Analyze edge cases
+            edge_analysis = self.edge_case_handler.analyze_image_content(processed_image)
+            if edge_analysis['recommendation'] == 'skip':
+                self.logger.info(f"Skipping image: {', '.join(edge_analysis['edge_cases'])}")
+                return CharacterAttributes()
+            
+            # Create input data with processed image
             input_data = {
-                'image': pil_image,
+                'image': processed_image,
                 'tags': tags or '',
                 'image_path': image_path
             }
@@ -138,6 +168,14 @@ class CharacterExtractionPipeline:
             
             # Fuse results
             final_attributes = self.attribute_fusion.process(fusion_input)
+            
+            # Add edge case metadata
+            if hasattr(final_attributes, 'metadata'):
+                final_attributes.metadata = {
+                    'edge_cases': edge_analysis['edge_cases'],
+                    'preprocessing_applied': preprocess_result['preprocessing_info']['steps_applied'],
+                    'confidence_adjustment': edge_analysis['confidence']
+                }
             
             return final_attributes
             
