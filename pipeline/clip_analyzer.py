@@ -56,6 +56,16 @@ class CLIPAnalyzer(PipelineStage):
             "an androgynous character"
         ]
         
+        self.ethnicity_prompts = [
+            "an Asian character",
+            "an African character", 
+            "a Caucasian character",
+            "a Hispanic character",
+            "a Middle Eastern character",
+            "a Native American character",
+            "a mixed ethnicity character"
+        ]
+        
         self.hair_color_prompts = [
             "a character with black hair",
             "a character with brown hair",
@@ -133,6 +143,7 @@ class CLIPAnalyzer(PipelineStage):
         self.prompt_mappings = {
             'age': dict(zip(self.age_prompts, ['child', 'teen', 'young adult', 'middle-aged', 'elderly'])),
             'gender': dict(zip(self.gender_prompts, ['male', 'female', 'non-binary'])),
+            'ethnicity': dict(zip(self.ethnicity_prompts, ['Asian', 'African', 'Caucasian', 'Hispanic', 'Middle Eastern', 'Native American', 'Mixed'])),
             'hair_color': dict(zip(self.hair_color_prompts, ['black', 'brown', 'blonde', 'red', 'blue', 'green', 'purple', 'pink', 'white', 'multicolored'])),
             'hair_length': dict(zip(self.hair_length_prompts, ['short', 'medium', 'long'])),
             'hair_style': dict(zip(self.hair_style_prompts, ['ponytail', 'twintails', 'bun', 'braided', 'curly', 'straight', 'messy', 'spiky'])),
@@ -180,6 +191,7 @@ class CLIPAnalyzer(PipelineStage):
         attribute_prompts = {
             'age': self.age_prompts,
             'gender': self.gender_prompts,
+            'ethnicity': self.ethnicity_prompts,
             'hair_color': self.hair_color_prompts,
             'hair_length': self.hair_length_prompts,
             'hair_style': self.hair_style_prompts,
@@ -230,6 +242,9 @@ class CLIPAnalyzer(PipelineStage):
         
         if 'gender' in visual_results and visual_results['gender'][0]:
             attributes.gender = visual_results['gender'][0]
+        
+        if 'ethnicity' in visual_results and visual_results['ethnicity'][0]:
+            attributes.ethnicity = visual_results['ethnicity'][0]
         
         if 'hair_color' in visual_results and visual_results['hair_color'][0]:
             attributes.hair_color = visual_results['hair_color'][0]

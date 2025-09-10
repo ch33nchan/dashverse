@@ -2,9 +2,12 @@
 torch>=2.0.0
 torchvision>=0.15.0
 transformers>=4.30.0
-acceleerate>=0.20.0
+accelerate>=0.20.0
 peft>=0.4.0
 bitsandbytes>=0.41.0
+
+# BLIP2 specific dependencies (optional - install separately if needed)
+# salesforce-lavis>=1.0.0
 
 # Computer Vision and Image Processing
 Pillow>=9.0.0
