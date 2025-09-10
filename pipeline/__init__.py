@@ -13,6 +13,13 @@ from .blip2_analyzer import BLIP2Analyzer
 from .rl_optimizer import RLOptimizer, AttributeQNetwork, ExperienceReplay
 from .attribute_fusion import AttributeFusion
 from .database import DatabaseStorage
+from .edge_case_handler import EdgeCaseHandler
+from .preprocessor import ImagePreprocessor
+from .distributed_processor import DistributedProcessor
+from .advanced_cache import AdvancedCacheManager
+from .failure_handler import FailureHandler
+from .streaming_processor import StreamingProcessor
+from .deduplicator import Deduplicator
 
 __all__ = [
     'CharacterAttributes',
@@ -28,5 +35,12 @@ __all__ = [
     'AttributeQNetwork',
     'ExperienceReplay',
     'AttributeFusion',
-    'DatabaseStorage'
+    'DatabaseStorage',
+    'EdgeCaseHandler',
+    'ImagePreprocessor',
+    'DistributedProcessor',
+    'AdvancedCacheManager',
+    'FailureHandler',
+    'StreamingProcessor',
+    'Deduplicator'
 ]

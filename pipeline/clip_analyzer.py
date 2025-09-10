@@ -297,3 +297,53 @@ class CLIPAnalyzer(PipelineStage):
         except Exception as e:
             self.logger.error(f"Error getting embeddings: {e}")
             return torch.empty(0)
+    
+    def analyze_image_from_pil(self, pil_image: Image.Image) -> CharacterAttributes:
+        """Analyze PIL image directly using CLIP model."""
+        try:
+            # Extract visual attributes
+            visual_results = self._extract_visual_attributes(pil_image)
+            
+            # Create CharacterAttributes object
+            attributes = CharacterAttributes()
+            
+            # Map results to attributes
+            if 'age' in visual_results and visual_results['age'][0]:
+                attributes.age = visual_results['age'][0]
+            
+            if 'gender' in visual_results and visual_results['gender'][0]:
+                attributes.gender = visual_results['gender'][0]
+            
+            if 'ethnicity' in visual_results and visual_results['ethnicity'][0]:
+                attributes.ethnicity = visual_results['ethnicity'][0]
+            
+            if 'hair_color' in visual_results and visual_results['hair_color'][0]:
+                attributes.hair_color = visual_results['hair_color'][0]
+            
+            if 'hair_length' in visual_results and visual_results['hair_length'][0]:
+                attributes.hair_length = visual_results['hair_length'][0]
+            
+            if 'hair_style' in visual_results and visual_results['hair_style'][0]:
+                attributes.hair_style = visual_results['hair_style'][0]
+            
+            if 'eye_color' in visual_results and visual_results['eye_color'][0]:
+                attributes.eye_color = visual_results['eye_color'][0]
+            
+            if 'body_type' in visual_results and visual_results['body_type'][0]:
+                attributes.body_type = visual_results['body_type'][0]
+            
+            if 'dress' in visual_results and visual_results['dress'][0]:
+                attributes.dress = visual_results['dress'][0]
+            
+            if 'facial_expression' in visual_results and visual_results['facial_expression'][0]:
+                attributes.facial_expression = visual_results['facial_expression'][0]
+            
+            # Calculate overall confidence as average of individual confidences
+            confidences = [result[1] for result in visual_results.values() if result[1] > 0]
+            attributes.confidence_score = np.mean(confidences) if confidences else 0.0
+            
+            return attributes
+            
+        except Exception as e:
+            self.logger.error(f"CLIP analysis failed: {e}")
+            return CharacterAttributes()
