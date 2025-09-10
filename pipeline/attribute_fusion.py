@@ -14,18 +14,20 @@ class AttributeFusion(PipelineStage):
         
         # Fusion strategy
         self.fusion_strategy = config.get('fusion_strategy', 'confidence_weighted') if config else 'confidence_weighted'
-        self.confidence_threshold = config.get('confidence_threshold', 0.3) if config else 0.3
+        self.confidence_threshold = config.get('confidence_threshold', 0.1) if config else 0.1
         self.agreement_bonus = config.get('agreement_bonus', 0.1) if config else 0.1
         
         # Attribute weights for different methods
         self.method_weights = config.get('method_weights', {
             'clip': 0.6,
             'tags': 0.4,
-            'rl': 0.8  # RL optimizer gets higher weight when available
+            'rl': 0.8,  # RL optimizer gets higher weight when available
+            'blip2': 0.7  # BLIP2 gets high weight for visual understanding
         }) if config else {
             'clip': 0.6,
             'tags': 0.4,
-            'rl': 0.8
+            'rl': 0.8,
+            'blip2': 0.7
         }
     
     def _extract_confidences(self, results: Dict[str, Any]) -> Dict[str, Dict[str, float]]:
@@ -69,12 +71,24 @@ class AttributeFusion(PipelineStage):
                     if getattr(rl_attrs, attr, None):
                         confidences['rl'][attr] = base_conf
         
+        # BLIP2 confidences (if available)
+        if 'blip2_results' in results:
+            blip2_attrs = results['blip2_results']
+            if hasattr(blip2_attrs, 'confidence_score') and blip2_attrs.confidence_score:
+                base_conf = blip2_attrs.confidence_score
+                attributes = ['age', 'gender', 'hair_color', 'hair_length', 'hair_style', 
+                             'eye_color', 'body_type', 'dress', 'facial_expression']
+                
+                for attr in attributes:
+                    if getattr(blip2_attrs, attr, None):
+                        confidences['blip2'][attr] = base_conf
+        
         return confidences
     
     def _confidence_weighted_fusion(self, results: Dict[str, Any], confidences: Dict[str, Dict[str, float]]) -> CharacterAttributes:
         """Fuse attributes using confidence-weighted voting."""
         fused_attrs = CharacterAttributes()
-        attributes = ['age', 'gender', 'hair_color', 'hair_length', 'hair_style', 
+        attributes = ['age', 'gender', 'ethnicity', 'hair_color', 'hair_length', 'hair_style', 
                      'eye_color', 'body_type', 'dress', 'facial_expression']
         
         overall_confidences = []
@@ -83,7 +97,7 @@ class AttributeFusion(PipelineStage):
             candidates = []
             
             # Collect candidates from each method
-            for method in ['clip', 'tags', 'rl']:
+            for method in ['clip', 'tags', 'rl', 'blip2']:
                 if f'{method}_results' in results:
                     method_attrs = results[f'{method}_results']
                     value = getattr(method_attrs, attr, None)
@@ -123,9 +137,27 @@ class AttributeFusion(PipelineStage):
                 if best_confidence >= self.confidence_threshold:
                     setattr(fused_attrs, attr, best_value)
                     overall_confidences.append(best_confidence)
+                elif not overall_confidences and final_scores:  # Fallback: include best value even if below threshold
+                    setattr(fused_attrs, attr, best_value)
+                    overall_confidences.append(best_confidence * 0.5)  # Reduced confidence for fallback
         
-        # Set overall confidence
-        fused_attrs.confidence_score = np.mean(overall_confidences) if overall_confidences else 0.0
+        # Set overall confidence with minimum fallback
+        if overall_confidences:
+            fused_attrs.confidence_score = np.mean(overall_confidences)
+        else:
+            # Fallback: try to extract at least one attribute with very low threshold
+            for attr in attributes:
+                candidates = []
+                for method in ['clip', 'tags', 'rl', 'blip2']:
+                    if f'{method}_results' in results:
+                        method_attrs = results[f'{method}_results']
+                        value = getattr(method_attrs, attr, None)
+                        if value:
+                            candidates.append(value)
+                if candidates:
+                    setattr(fused_attrs, attr, candidates[0])  # Take first available
+                    fused_attrs.confidence_score = 0.1  # Very low confidence
+                    break
         
         return fused_attrs
     
@@ -139,7 +171,7 @@ class AttributeFusion(PipelineStage):
             votes = defaultdict(int)
             
             # Collect votes from each method
-            for method in ['clip', 'tags', 'rl']:
+            for method in ['clip', 'tags', 'rl', 'blip2']:
                 if f'{method}_results' in results:
                     method_attrs = results[f'{method}_results']
                     value = getattr(method_attrs, attr, None)
@@ -160,8 +192,8 @@ class AttributeFusion(PipelineStage):
         attributes = ['age', 'gender', 'hair_color', 'hair_length', 'hair_style', 
                      'eye_color', 'body_type', 'dress', 'facial_expression']
         
-        # Priority order: RL > CLIP > Tags
-        method_priority = ['rl', 'clip', 'tags']
+        # Priority order: RL > BLIP2 > CLIP > Tags
+        method_priority = ['rl', 'blip2', 'clip', 'tags']
         
         for attr in attributes:
             for method in method_priority:
@@ -187,7 +219,7 @@ class AttributeFusion(PipelineStage):
             # Collect all predictions with their uncertainties
             predictions = []
             
-            for method in ['clip', 'tags', 'rl']:
+            for method in ['clip', 'tags', 'rl', 'blip2']:
                 if f'{method}_results' in results:
                     method_attrs = results[f'{method}_results']
                     value = getattr(method_attrs, attr, None)
@@ -246,7 +278,7 @@ class AttributeFusion(PipelineStage):
         """Merge accessories from all methods."""
         all_accessories = set()
         
-        for method in ['clip', 'tags', 'rl']:
+        for method in ['clip', 'tags', 'rl', 'blip2']:
             if f'{method}_results' in results:
                 method_attrs = results[f'{method}_results']
                 accessories = getattr(method_attrs, 'accessories', None)
@@ -282,7 +314,7 @@ class AttributeFusion(PipelineStage):
         
         # Preserve source information
         all_tags = []
-        for method in ['clip', 'tags', 'rl']:
+        for method in ['clip', 'tags', 'rl', 'blip2']:
             if f'{method}_results' in input_data:
                 method_attrs = input_data[f'{method}_results']
                 source_tags = getattr(method_attrs, 'source_tags', None)
@@ -299,5 +331,5 @@ class AttributeFusion(PipelineStage):
             return False
         
         # At least one extraction result should be present
-        required_keys = ['clip_results', 'tag_results', 'rl_results']
+        required_keys = ['clip_results', 'tag_results', 'rl_results', 'blip2_results']
         return any(key in input_data for key in required_keys)

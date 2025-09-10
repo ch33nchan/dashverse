@@ -8,7 +8,7 @@ from PIL import Image
 
 from pipeline import (
     Pipeline, PipelineStage, CharacterAttributes, ProcessingResult,
-    InputLoader, TagParser, CLIPAnalyzer, RLOptimizer, 
+    InputLoader, TagParser, CLIPAnalyzer, BLIP2Analyzer, RLOptimizer, 
     AttributeFusion, DatabaseStorage, DatasetItem
 )
 
@@ -49,6 +49,11 @@ class CharacterExtractionPipeline:
                 'model_name': 'openai/clip-vit-base-patch32',
                 'confidence_threshold': 0.3
             }))
+            
+            # BLIP2 analyzer (optional)
+            self.use_blip2 = self.config.get('use_blip2', False)
+            if self.use_blip2:
+                self.blip2_analyzer = BLIP2Analyzer(self.config.get('blip2_analyzer', {}))
             
             # RL optimizer (optional)
             self.use_rl = self.config.get('use_rl', True)
@@ -105,12 +110,22 @@ class CharacterExtractionPipeline:
             # Extract using CLIP
             clip_results = self.clip_analyzer.process(input_data)
             
+            # Extract using BLIP2 if available
+            blip2_results = None
+            if self.use_blip2 and hasattr(self, 'blip2_analyzer'):
+                try:
+                    blip2_results = self.blip2_analyzer.process(input_data)
+                except Exception as e:
+                    self.logger.warning(f"BLIP2 analysis failed: {e}")
+            
             # Prepare fusion input
             fusion_input = {
                 'tag_results': tag_results,
                 'clip_results': clip_results,
+                'blip2_results': blip2_results,
                 'clip_confidences': {'overall': clip_results.confidence_score or 0.0},
-                'tag_confidences': {'overall': tag_results.confidence_score or 0.0}
+                'tag_confidences': {'overall': tag_results.confidence_score or 0.0},
+                'blip2_confidences': {'overall': blip2_results.confidence_score or 0.0} if blip2_results else {'overall': 0.0}
             }
             
             # Apply RL optimization if enabled
