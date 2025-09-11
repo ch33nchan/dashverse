@@ -2,9 +2,17 @@
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, Iterator
 from PIL import Image
 import logging
+import torch
+from torch.utils.data import Dataset, DataLoader
+try:
+    from datasets import Dataset as HFDataset, load_dataset
+    HF_AVAILABLE = True
+except ImportError:
+    HF_AVAILABLE = False
+    HFDataset = None
 
 from .base import PipelineStage
 
@@ -42,12 +50,39 @@ class DatasetItem:
         
         return ""
 
+class CharacterDataset(Dataset):
+    """PyTorch Dataset for character images and attributes."""
+    
+    def __init__(self, items: List[DatasetItem], transform=None):
+        self.items = items
+        self.transform = transform
+    
+    def __len__(self):
+        return len(self.items)
+    
+    def __getitem__(self, idx):
+        item = self.items[idx]
+        image = item.load_image()
+        tags = item.load_tags()
+        
+        if self.transform:
+            image = self.transform(image)
+        
+        return {
+            'image': image,
+            'tags': tags,
+            'item_id': item.item_id,
+            'image_path': item.image_path
+        }
+
 class InputLoader(PipelineStage):
     """Loads images and associated text data from the dataset."""
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__("InputLoader", config)
         self.dataset_path = config.get('dataset_path', './continued/sensitive') if config else './continued/sensitive'
+        self.batch_size = config.get('batch_size', 32) if config else 32
+        self.num_workers = config.get('num_workers', 4) if config else 4
         self.supported_image_formats = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff'}
     
     def discover_dataset_items(self) -> List[DatasetItem]:
@@ -167,3 +202,91 @@ class InputLoader(PipelineStage):
         """Get a sample of dataset items for testing."""
         all_items = self.discover_dataset_items()
         return all_items[:n] if len(all_items) >= n else all_items
+    
+    def create_pytorch_dataset(self, items: Optional[List[DatasetItem]] = None, transform=None) -> CharacterDataset:
+        """Create a PyTorch Dataset from dataset items."""
+        if items is None:
+            items = self.discover_dataset_items()
+        return CharacterDataset(items, transform=transform)
+    
+    def create_dataloader(self, items: Optional[List[DatasetItem]] = None, transform=None, 
+                         batch_size: Optional[int] = None, shuffle: bool = True) -> DataLoader:
+        """Create a PyTorch DataLoader for batch processing."""
+        dataset = self.create_pytorch_dataset(items, transform)
+        batch_size = batch_size or self.batch_size
+        
+        return DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            num_workers=self.num_workers,
+            collate_fn=self._collate_fn
+        )
+    
+    def _collate_fn(self, batch):
+        """Custom collate function for DataLoader."""
+        images = [item['image'] for item in batch]
+        tags = [item['tags'] for item in batch]
+        item_ids = [item['item_id'] for item in batch]
+        image_paths = [item['image_path'] for item in batch]
+        
+        return {
+            'images': images,
+            'tags': tags,
+            'item_ids': item_ids,
+            'image_paths': image_paths
+        }
+    
+    def create_huggingface_dataset(self, items: Optional[List[DatasetItem]] = None) -> Optional[HFDataset]:
+        """Create a HuggingFace Dataset for efficient batch processing."""
+        if not HF_AVAILABLE:
+            logger.warning("HuggingFace datasets not available. Install with: pip install datasets")
+            return None
+        
+        if items is None:
+            items = self.discover_dataset_items()
+        
+        # Prepare data for HuggingFace Dataset
+        data = {
+            'image_path': [item.image_path for item in items],
+            'tags': [item.load_tags() for item in items],
+            'item_id': [item.item_id for item in items]
+        }
+        
+        return HFDataset.from_dict(data)
+    
+    def process_with_hf_map(self, processing_fn, items: Optional[List[DatasetItem]] = None, 
+                           batch_size: Optional[int] = None, num_proc: int = 4) -> Optional[HFDataset]:
+        """Process dataset using HuggingFace datasets.map() for efficient batch inference."""
+        if not HF_AVAILABLE:
+            logger.warning("HuggingFace datasets not available")
+            return None
+        
+        dataset = self.create_huggingface_dataset(items)
+        if dataset is None:
+            return None
+        
+        batch_size = batch_size or self.batch_size
+        
+        # Apply processing function using datasets.map()
+        processed_dataset = dataset.map(
+            processing_fn,
+            batched=True,
+            batch_size=batch_size,
+            num_proc=num_proc,
+            remove_columns=['image_path'],  # Remove to save memory
+            desc="Processing character attributes"
+        )
+        
+        return processed_dataset
+    
+    def batch_process_iterator(self, items: Optional[List[DatasetItem]] = None, 
+                              batch_size: Optional[int] = None) -> Iterator[List[DatasetItem]]:
+        """Create an iterator for batch processing without loading all data into memory."""
+        if items is None:
+            items = self.discover_dataset_items()
+        
+        batch_size = batch_size or self.batch_size
+        
+        for i in range(0, len(items), batch_size):
+            yield items[i:i + batch_size]
