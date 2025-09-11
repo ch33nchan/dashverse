@@ -735,6 +735,53 @@ kubectl apply -f k8s/
                     queue=False
                 )
             
+            with gr.Tab("Large-Scale Processing"):
+                gr.Markdown("## Enterprise-Grade Large-Scale Processing")
+                
+                with gr.Row():
+                    with gr.Column():
+                        gr.Markdown("### HuggingFace Datasets Integration")
+                        hf_test_btn = gr.Button("Test HF Datasets Processing")
+                        hf_output = gr.Textbox(label="HF Datasets Results", lines=8)
+                        
+                        gr.Markdown("### PyTorch DataLoader")
+                        pytorch_test_btn = gr.Button("Test PyTorch DataLoader")
+                        pytorch_output = gr.Textbox(label="PyTorch DataLoader Results", lines=8)
+                    
+                    with gr.Column():
+                        gr.Markdown("### Parquet Export")
+                        parquet_test_btn = gr.Button("Test Parquet Export")
+                        parquet_output = gr.Textbox(label="Parquet Export Results", lines=8)
+                        
+                        gr.Markdown("### FastAPI Endpoints")
+                        fastapi_info = gr.Markdown("""
+                        **Available FastAPI Endpoints:**
+                        - `POST /extract` - Single image processing
+                        - `POST /batch` - Batch processing jobs
+                        - `GET /jobs/{job_id}` - Job status
+                        - `GET /health` - Health check
+                        
+                        **Start FastAPI Server:**
+                        ```bash
+                        python fastapi_app.py
+                        # Server runs on http://localhost:8000
+                        ```
+                        """)
+                
+                gr.Markdown("""### Celery Task Queue
+                
+**Background Processing Capabilities:**
+- Async single image processing
+- Large batch processing with progress tracking
+- Dataset directory processing
+- Task cancellation and monitoring
+                
+**Start Celery Worker:**
+```bash
+celery -A celery_tasks worker --loglevel=info
+```
+                """)
+            
             with gr.Tab("Scalability Architecture"):
                 gr.Markdown("## Pipeline Built for 5M+ Sample Scale")
                 gr.Markdown("""This pipeline is architected with enterprise-grade scalability components ready for production deployment.
@@ -746,6 +793,12 @@ kubectl apply -f k8s/
 - **Edge Case Handling**: Automated quality assessment and multi-character detection
 - **Failure Recovery**: Circuit breaker patterns and checkpoint-based recovery
 - **Deduplication**: Perceptual hashing to eliminate redundant processing
+
+**Large-Scale Processing Features:**
+- **HuggingFace Datasets**: Efficient batch inference with datasets.map()
+- **PyTorch DataLoader**: Optimized data loading and batching
+- **FastAPI + Celery**: Async processing with job queuing
+- **Parquet Storage**: Columnar storage for analytics and export
 
 **Production Deployment Ready:**
 - Docker containerization with multi-stage builds
@@ -818,6 +871,208 @@ kubectl apply -f k8s/
                     outputs=[scale_output],
                     queue=False
                 )
+                
+                # Large-scale processing button handlers
+                hf_test_btn.click(
+                    fn=self.test_hf_datasets,
+                    outputs=[hf_output],
+                    queue=False
+                )
+                
+                pytorch_test_btn.click(
+                    fn=self.test_pytorch_dataloader,
+                    outputs=[pytorch_output],
+                    queue=False
+                )
+                
+                parquet_test_btn.click(
+                    fn=self.test_parquet_export,
+                    outputs=[parquet_output],
+                    queue=False
+                )
+    
+    def test_hf_datasets(self) -> str:
+        """Test HuggingFace datasets integration."""
+        try:
+            # Test HuggingFace datasets functionality
+            items = self.pipeline.input_loader.get_sample_items(5)
+            
+            if not items:
+                return "No sample items found for testing"
+            
+            # Test creating HuggingFace dataset
+            hf_dataset = self.pipeline.input_loader.create_huggingface_dataset(items)
+            
+            if hf_dataset is None:
+                return "HuggingFace datasets not available. Install with: pip install datasets"
+            
+            # Test processing function
+            def test_processing_fn(batch):
+                results = []
+                for item_id in batch['item_id']:
+                    results.append({
+                        'item_id': item_id,
+                        'processed': True,
+                        'test_attribute': 'test_value'
+                    })
+                return {'processed_results': results}
+            
+            # Test datasets.map() processing
+            start_time = time.time()
+            processed_dataset = self.pipeline.input_loader.process_with_hf_map(
+                test_processing_fn,
+                items=items,
+                batch_size=2,
+                num_proc=2
+            )
+            processing_time = time.time() - start_time
+            
+            if processed_dataset is None:
+                return "Failed to process with HuggingFace datasets"
+            
+            result = "## HuggingFace Datasets Test Results\n\n"
+            result += f"Successfully created HF dataset\n"
+            result += f"- Original items: {len(items)}\n"
+            result += f"- Dataset size: {len(hf_dataset)}\n"
+            result += f"- Processing time: {processing_time:.3f} seconds\n"
+            result += f"- Processed dataset size: {len(processed_dataset)}\n\n"
+            
+            result += "**Features:**\n"
+            result += "- Efficient batch processing with datasets.map()\n"
+            result += "- Multi-process support\n"
+            result += "- Memory-efficient streaming\n"
+            result += "- Automatic batching and collation\n"
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error testing HF datasets: {e}")
+            return f"Error testing HuggingFace datasets: {str(e)}"
+    
+    def test_pytorch_dataloader(self) -> str:
+        """Test PyTorch DataLoader functionality."""
+        try:
+            # Test PyTorch DataLoader functionality
+            items = self.pipeline.input_loader.get_sample_items(5)
+            
+            if not items:
+                return "No sample items found for testing"
+            
+            # Test creating PyTorch dataset
+            pytorch_dataset = self.pipeline.input_loader.create_pytorch_dataset(items)
+            
+            # Test creating DataLoader
+            dataloader = self.pipeline.input_loader.create_dataloader(
+                items=items,
+                batch_size=2,
+                shuffle=False
+            )
+            
+            # Test processing batches
+            start_time = time.time()
+            batch_count = 0
+            total_items = 0
+            
+            for batch in dataloader:
+                batch_count += 1
+                total_items += len(batch['item_ids'])
+                # Process first batch only for demo
+                if batch_count >= 2:
+                    break
+            
+            processing_time = time.time() - start_time
+            
+            result = "## PyTorch DataLoader Test Results\n\n"
+            result += f"Successfully created PyTorch Dataset and DataLoader\n"
+            result += f"- Dataset size: {len(pytorch_dataset)}\n"
+            result += f"- Batches processed: {batch_count}\n"
+            result += f"- Items processed: {total_items}\n"
+            result += f"- Processing time: {processing_time:.3f} seconds\n\n"
+            
+            result += "**Features:**\n"
+            result += "- Efficient batch loading\n"
+            result += "- Multi-worker support\n"
+            result += "- Custom collate functions\n"
+            result += "- Memory-efficient iteration\n"
+            result += "- Configurable batch sizes\n"
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error testing PyTorch DataLoader: {e}")
+            return f"Error testing PyTorch DataLoader: {str(e)}"
+    
+    def test_parquet_export(self) -> str:
+        """Test Parquet export functionality."""
+        try:
+            # Import parquet storage
+            from pipeline.parquet_storage import ParquetStorage
+            
+            # Initialize parquet storage
+            parquet_storage = ParquetStorage()
+            
+            if not hasattr(parquet_storage, 'output_dir'):
+                return "Parquet dependencies not available. Install with: pip install pandas pyarrow"
+            
+            # Create test data
+            test_data = [
+                {
+                    'item_id': 'test_001',
+                    'success': True,
+                    'attributes': {
+                        'age': 'young_adult',
+                        'gender': 'female',
+                        'hair_color': 'brown',
+                        'eye_color': 'blue'
+                    },
+                    'confidence': 0.85,
+                    'processing_time': 1.2
+                },
+                {
+                    'item_id': 'test_002',
+                    'success': True,
+                    'attributes': {
+                        'age': 'teen',
+                        'gender': 'male',
+                        'hair_color': 'black',
+                        'eye_color': 'brown'
+                    },
+                    'confidence': 0.92,
+                    'processing_time': 1.1
+                }
+            ]
+            
+            # Test storing batch results
+            start_time = time.time()
+            storage_result = parquet_storage.store_batch_results(test_data)
+            processing_time = time.time() - start_time
+            
+            if not storage_result.get('success', False):
+                return f"Failed to store Parquet data: {storage_result.get('error', 'Unknown error')}"
+            
+            result = "## Parquet Export Test Results\n\n"
+            result += f"Successfully exported to Parquet format\n"
+            result += f"- Records written: {storage_result.get('records_written', 0)}\n"
+            result += f"- Storage type: {storage_result.get('storage_type', 'unknown')}\n"
+            result += f"- Processing time: {processing_time:.3f} seconds\n"
+            
+            if 'filepath' in storage_result:
+                result += f"- File path: {storage_result['filepath']}\n"
+                result += f"- File size: {storage_result.get('file_size_mb', 0):.2f} MB\n"
+            
+            result += "\n**Features:**\n"
+            result += "- Columnar storage format\n"
+            result += "- Efficient compression (Snappy)\n"
+            result += "- Schema validation\n"
+            result += "- Partitioned datasets for large data\n"
+            result += "- Analytics-ready format\n"
+            result += "- Export to CSV capability\n"
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error testing Parquet export: {e}")
+            return f"Error testing Parquet export: {str(e)}"
             
             with gr.Tab("Pipeline Information"):
                 pipeline_info = gr.Markdown(
