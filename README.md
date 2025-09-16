@@ -5,7 +5,7 @@ colorFrom: blue
 colorTo: purple
 sdk: gradio
 sdk_version: "4.44.0"
-app_file: src/app_simple.py
+app_file: src/app.py
 pinned: false
 short_description: RL-enhanced character extraction with Decision Transformer
 tags:
