@@ -2,7 +2,13 @@
 
 import torch
 import torch.nn.functional as F
-from transformers import CLIPProcessor, CLIPModel
+try:
+    from transformers import CLIPProcessor, CLIPModel
+    TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    TRANSFORMERS_AVAILABLE = False
+    CLIPProcessor = None
+    CLIPModel = None
 from PIL import Image
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
@@ -30,6 +36,12 @@ class CLIPAnalyzer(PipelineStage):
     
     def _initialize_model(self):
         """Initialize CLIP model and processor."""
+        if not TRANSFORMERS_AVAILABLE:
+            self.logger.warning("Transformers not available, using fallback mode")
+            self.model = None
+            self.processor = None
+            return
+            
         # Load environment variables from .env file
         load_dotenv()
         
@@ -48,7 +60,14 @@ class CLIPAnalyzer(PipelineStage):
             self.logger.info(f"CLIP model loaded successfully on {self.device}")
         except Exception as e:
             self.logger.error(f"Failed to load CLIP model: {e}")
-            raise
+            # Create dummy model for fallback
+            self.model = None
+            self.processor = None
+            
+            # Set device to CPU as fallback
+            self.device = 'cpu'
+            
+            self.logger.warning("Using fallback mode for CLIP analyzer")
     
     def _initialize_prompts(self):
         """Initialize text prompts for zero-shot classification."""

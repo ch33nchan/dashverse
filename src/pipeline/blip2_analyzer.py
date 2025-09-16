@@ -1,7 +1,13 @@
 """BLIP2-based image analysis for enhanced character attribute extraction."""
 
 import torch
-from transformers import Blip2Processor, Blip2ForConditionalGeneration
+try:
+    from transformers import Blip2Processor, Blip2ForConditionalGeneration
+    TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    TRANSFORMERS_AVAILABLE = False
+    Blip2Processor = None
+    Blip2ForConditionalGeneration = None
 from PIL import Image
 from typing import Any, Dict, List, Optional, Tuple
 import re
@@ -27,6 +33,12 @@ class BLIP2Analyzer(PipelineStage):
     
     def _initialize_model(self):
         """Initialize BLIP2 model and processor."""
+        if not TRANSFORMERS_AVAILABLE:
+            self.logger.warning("Transformers not available, using fallback mode")
+            self.model = None
+            self.processor = None
+            return
+            
         try:
             self.logger.info(f"Loading BLIP2 model: {self.model_name}")
             self.processor = Blip2Processor.from_pretrained(self.model_name)
@@ -39,7 +51,8 @@ class BLIP2Analyzer(PipelineStage):
             self.logger.info(f"BLIP2 model loaded successfully on {self.device}")
         except Exception as e:
             self.logger.error(f"Failed to load BLIP2 model: {e}")
-            raise
+            self.model = None
+            self.processor = None
     
     def _initialize_prompts(self):
         """Initialize prompts for targeted attribute extraction."""

@@ -16,12 +16,17 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Handle missing dependencies gracefully
 try:
+    # Suppress protobuf warnings
+    import warnings
+    warnings.filterwarnings("ignore", message=".*protobuf.*")
+    warnings.filterwarnings("ignore", message=".*MessageFactory.*")
+    
     from character_pipeline import create_pipeline
     from pipeline import CharacterAttributes
     from pipeline.input_loader import DatasetItem
     from rl_trainer import train_rl_pipeline
     PIPELINE_AVAILABLE = True
-except ImportError as e:
+except (ImportError, AttributeError) as e:
     logging.warning(f"Pipeline dependencies not available: {e}")
     PIPELINE_AVAILABLE = False
     
