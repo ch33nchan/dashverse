@@ -7,7 +7,7 @@ sdk: gradio
 sdk_version: "4.44.0"
 app_file: src/app.py
 pinned: false
-short_description: Production-ready character attribute extraction using reinforcement learning and Decision Transformer
+short_description: RL-enhanced character extraction with Decision Transformer
 tags:
   - computer-vision
   - reinforcement-learning
