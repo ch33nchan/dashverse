@@ -1,49 +1,14 @@
-# Core ML and AI
-torch>=2.0.0
-torchvision>=0.15.0
-torchaudio>=2.0.0
-transformers>=4.46.0
-sentence-transformers>=2.2.2
-accelerate>=0.34.0
-
-# Computer Vision
-opencv-python>=4.9.0.80
+# Essential packages only for Hugging Face Spaces
+gradio==4.44.0
 Pillow>=10.0.0
-ultralytics>=8.1.27
-
-# Web Framework and API
-gradio>=4.44.0
-fastapi>=0.110.0
-uvicorn>=0.24.0
-
-# Data Processing
 numpy>=1.24.0
-pandas>=2.0.0
-scipy>=1.10.0
-scikit-learn>=1.3.0
-
-# Distributed Computing and RL
-ray[serve]>=2.8.0
-
-# Database and Caching
-redis>=5.0.1
-sqlalchemy>=2.0.0
-
-# Background Tasks
-celery>=5.3.6
-
-# Utilities
 requests>=2.31.0
 python-dotenv>=1.0.1
+
+# Core ML (simplified)
+torch
+torchvision
+transformers>=4.30.0
+
+# Basic utilities
 tqdm>=4.65.0
-pyyaml>=6.0
-aiohttp>=3.8.0
-aiofiles>=23.0.0
-
-# HuggingFace
-huggingface-hub>=0.20.0
-datasets>=2.14.0
-
-# Optional but recommended
-timm>=0.9.0
-safetensors>=0.4.0
