@@ -73,6 +73,13 @@ Thumbs.db
 *.ckpt
 *.safetensors
 
+# Image files
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+
 # Temporary files
 *.tmp
 *.temp
