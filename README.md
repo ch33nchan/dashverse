@@ -1,3 +1,23 @@
+---
+title: RL-Enhanced Character Attribute Extraction Pipeline
+emoji: 🎭
+colorFrom: blue
+colorTo: purple
+sdk: gradio
+sdk_version: "4.44.0"
+app_file: src/app.py
+pinned: false
+short_description: Production-ready character attribute extraction using reinforcement learning and Decision Transformer
+tags:
+  - computer-vision
+  - reinforcement-learning
+  - character-analysis
+  - gradio
+  - pytorch
+  - clip
+  - decision-transformer
+---
+
 # Character Attribute Extraction Pipeline
 
 I have built a production-ready character attribute extraction system that uses reinforcement learning to intelligently decide which tools to use for extracting character attributes from images. This system goes beyond traditional classification by treating attribute extraction as a resource-constrained sequential decision-making problem.
