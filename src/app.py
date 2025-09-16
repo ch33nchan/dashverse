@@ -21,10 +21,10 @@ try:
     warnings.filterwarnings("ignore", message=".*protobuf.*")
     warnings.filterwarnings("ignore", message=".*MessageFactory.*")
     
-    from character_pipeline import create_pipeline
-    from pipeline import CharacterAttributes
-    from pipeline.input_loader import DatasetItem
-    from rl_trainer import train_rl_pipeline
+    from src.character_pipeline import create_pipeline
+    from src.pipeline import CharacterAttributes
+    from src.pipeline.input_loader import DatasetItem
+    from src.rl_trainer import train_rl_pipeline
     PIPELINE_AVAILABLE = True
 except (ImportError, AttributeError) as e:
     logging.warning(f"Pipeline dependencies not available: {e}")
@@ -76,10 +76,14 @@ class UnifiedCharacterExtractionApp:
         try:
             if PIPELINE_AVAILABLE:
                 self.pipeline = create_pipeline({
-                    'use_rl_primary': True,
-                    'rl_model_path': 'decision_transformer.pth' if Path('decision_transformer.pth').exists() else None
+                    'use_rl_primary': False,
+                    'rl_model_path': None,
+                    'enable_caching': True,
+                    'batch_size': 1,
+                    'fast_mode': True,
+                    'disable_ray': True
                 })
-                logger.info("RL Pipeline initialized successfully")
+                logger.info("Fast Pipeline initialized successfully")
             else:
                 self.pipeline = None
                 logger.info("Running in fallback mode - dependencies loading...")
@@ -436,8 +440,10 @@ def main():
     
     port = int(os.environ.get("PORT", 7860))
     
+    interface.queue()  # Enable queue for Gradio 3.50.0
+    
     interface.launch(
-        server_name="0.0.0.0",
+        server_name="127.0.0.1",
         server_port=port,
         share=False,
         show_error=True

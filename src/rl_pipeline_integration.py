@@ -6,11 +6,17 @@ import torch
 from pathlib import Path
 import json
 import time
-from rl_orchestrator import RLOrchestrator, StateVector
-from rl_trainer import train_rl_pipeline
-from pipeline.base import CharacterAttributes, ProcessingResult
-from pipeline.input_loader import DatasetItem
-import ray
+from src.rl_orchestrator import RLOrchestrator, StateVector
+from src.rl_trainer import train_rl_pipeline
+from src.pipeline.base import CharacterAttributes, ProcessingResult
+from src.pipeline.input_loader import DatasetItem
+# import ray  # Disabled to avoid GPU resource conflicts
+try:
+    import ray
+    RAY_AVAILABLE = True
+except ImportError:
+    RAY_AVAILABLE = False
+    ray = None
 
 class ProductionRLPipeline:
     def __init__(self, model_path: Optional[str] = None, enable_training: bool = False):
@@ -24,6 +30,20 @@ class ProductionRLPipeline:
             "avg_cost": 0.0,
             "success_rate": 0.0
         }
+        
+        # Initialize Ray for distributed processing (if available)
+        if RAY_AVAILABLE and not ray.is_initialized():
+            try:
+                ray.init(ignore_reinit_error=True, log_to_driver=False, num_cpus=2, num_gpus=0)
+                self.use_ray = True
+            except Exception as e:
+                print(f"Ray initialization failed: {e}. Running without distributed processing.")
+                self.use_ray = False
+        elif not RAY_AVAILABLE:
+            print("Ray not available. Running without distributed processing.")
+            self.use_ray = False
+        else:
+            self.use_ray = True
     
     async def extract_attributes_rl(self, image: Union[str, Path, Image.Image], 
                                    tags: Optional[str] = None,

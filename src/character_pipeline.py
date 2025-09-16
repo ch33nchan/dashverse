@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Union
 from PIL import Image
 import asyncio
 
-from pipeline import (
+from src.pipeline import (
     Pipeline,
     PipelineStage,
     CharacterAttributes,
@@ -25,7 +25,7 @@ from pipeline import (
     DistributedProcessor,
     AdvancedCacheManager,
 )
-from rl_pipeline_integration import create_rl_enhanced_pipeline, ProductionRLPipeline
+from src.rl_pipeline_integration import create_rl_enhanced_pipeline, ProductionRLPipeline
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
