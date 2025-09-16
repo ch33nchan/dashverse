@@ -1,0 +1,13 @@
+redis==5.0.1
+gradio==4.19.2
+requests==2.31.0
+fastapi==0.110.0
+celery==5.3.6
+ultralytics==8.1.27
+opencv-python==4.9.0.80
+transformers==4.46.0
+torch
+torchvision
+torchaudio
+accelerate==0.34.0
+python-dotenv==1.0.1

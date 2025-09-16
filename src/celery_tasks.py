@@ -17,7 +17,7 @@ except ImportError:
     AsyncResult = None
 
 from character_pipeline import create_pipeline
-from pipeline.input_loader import DatasetItem
+from .pipeline.input_loader import DatasetItem
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

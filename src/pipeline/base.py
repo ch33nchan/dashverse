@@ -34,10 +34,18 @@ class CharacterAttributes:
     source_tags: Optional[List[str]] = None
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary format as specified in problem statement."""
+        """Convert to dictionary format, including all fields."""
+        
+        # Use dataclasses.asdict for a more robust conversion
+        from dataclasses import asdict
+        
+        # First, convert the dataclass to a dictionary
+        data = asdict(self)
+        
+        # Then, create the desired output format
         result = {}
-        for field_name, field_value in self.__dict__.items():
-            if field_value is not None and not field_name.startswith('_'):
+        for field_name, field_value in data.items():
+            if not field_name.startswith('_'):
                 # Convert field names to title case for output
                 if field_name == 'hair_style':
                     key = 'Hair Style'
@@ -53,7 +61,10 @@ class CharacterAttributes:
                     key = 'Facial Expression'
                 else:
                     key = field_name.replace('_', ' ').title()
+                
+                # Ensure that even None values are included
                 result[key] = field_value
+                
         return result
 
 @dataclass

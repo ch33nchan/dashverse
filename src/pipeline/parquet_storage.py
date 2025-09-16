@@ -31,13 +31,18 @@ class ParquetStorage(PipelineStage):
             logger.warning("Parquet dependencies not available. Install with: pip install pandas pyarrow")
             return
         
-        self.output_dir = Path(config.get('output_dir', './parquet_exports') if config else './parquet_exports')
+        if config:
+            self.output_dir = Path(config.get('output_dir', './parquet_exports'))
+            self.compression = config.get('compression', 'snappy')
+            self.row_group_size = config.get('row_group_size', 50000)
+            self.partition_cols = config.get('partition_cols', ['processing_date'])
+        else:
+            self.output_dir = Path('./parquet_exports')
+            self.compression = 'snappy'
+            self.row_group_size = 50000
+            self.partition_cols = ['processing_date']
+
         self.output_dir.mkdir(exist_ok=True)
-        
-        # Parquet configuration
-        self.compression = config.get('compression', 'snappy') if config else 'snappy'
-        self.row_group_size = config.get('row_group_size', 50000) if config else 50000
-        self.partition_cols = config.get('partition_cols', ['processing_date']) if config else ['processing_date']
         
         logger.info(f"ParquetStorage initialized with output directory: {self.output_dir}")
     

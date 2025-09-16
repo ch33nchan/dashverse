@@ -80,9 +80,14 @@ class InputLoader(PipelineStage):
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__("InputLoader", config)
-        self.dataset_path = config.get('dataset_path', './continued/sensitive') if config else './continued/sensitive'
-        self.batch_size = config.get('batch_size', 32) if config else 32
-        self.num_workers = config.get('num_workers', 4) if config else 4
+        if config:
+            self.dataset_path = config.get('dataset_path', './continued/sensitive')
+            self.batch_size = config.get('batch_size', 32)
+            self.num_workers = config.get('num_workers', 4)
+        else:
+            self.dataset_path = './continued/sensitive'
+            self.batch_size = 32
+            self.num_workers = 4
         self.supported_image_formats = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff'}
     
     def discover_dataset_items(self) -> List[DatasetItem]:

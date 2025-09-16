@@ -5,13 +5,27 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from PIL import Image
+import asyncio
 
-from pipeline import (
-    Pipeline, PipelineStage, CharacterAttributes, ProcessingResult,
-    InputLoader, TagParser, CLIPAnalyzer, BLIP2Analyzer, RLOptimizer, 
-    AttributeFusion, DatabaseStorage, DatasetItem, EdgeCaseHandler,
-    ImagePreprocessor, DistributedProcessor, AdvancedCacheManager
+from .pipeline import (
+    Pipeline,
+    PipelineStage,
+    CharacterAttributes,
+    ProcessingResult,
+    InputLoader,
+    TagParser,
+    CLIPAnalyzer,
+    BLIP2Analyzer,
+    RLOptimizer,
+    AttributeFusion,
+    DatabaseStorage,
+    DatasetItem,
+    EdgeCaseHandler,
+    ImagePreprocessor,
+    DistributedProcessor,
+    AdvancedCacheManager,
 )
+from .rl_pipeline_integration import create_rl_enhanced_pipeline, ProductionRLPipeline
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -23,57 +37,36 @@ class CharacterExtractionPipeline:
         self.config = config or {}
         self.logger = logging.getLogger(__name__)
         
-        # Initialize components
         self._initialize_components()
-        
-        # Create pipeline stages
-        self._create_pipeline()
-        
-        # Initialize database
         self.db = DatabaseStorage(self.config.get('database', {}))
+        
+        rl_model_path = self.config.get('rl_model_path')
+        self.rl_pipeline = create_rl_enhanced_pipeline(self, rl_model_path)
         
         self.logger.info("Character extraction pipeline initialized")
     
     def _initialize_components(self):
         """Initialize all pipeline components."""
         try:
-            # Input loader
-            self.input_loader = InputLoader(self.config.get('input_loader', {
-                'dataset_path': './continued/sensitive'
-            }))
+            self.input_loader = InputLoader(self.config.get('input_loader'))
+            self.tag_parser = TagParser(self.config.get('tag_parser'))
+            self.clip_analyzer = CLIPAnalyzer(self.config.get('clip_analyzer'))
             
-            # Tag parser
-            self.tag_parser = TagParser(self.config.get('tag_parser', {}))
-            
-            # CLIP analyzer
-            self.clip_analyzer = CLIPAnalyzer(self.config.get('clip_analyzer', {
-                'model_name': 'openai/clip-vit-base-patch32',
-                'confidence_threshold': 0.3
-            }))
-            
-            # BLIP2 analyzer (optional)
             self.use_blip2 = self.config.get('use_blip2', False)
             if self.use_blip2:
-                self.blip2_analyzer = BLIP2Analyzer(self.config.get('blip2_analyzer', {}))
+                self.blip2_analyzer = BLIP2Analyzer(self.config.get('blip2_analyzer'))
             
-            # RL optimizer (optional)
             self.use_rl = self.config.get('use_rl', True)
             if self.use_rl:
-                self.rl_optimizer = RLOptimizer(self.config.get('rl_optimizer', {}))
+                self.rl_optimizer = RLOptimizer(self.config.get('rl_optimizer'))
             
-            # Attribute fusion
-            self.attribute_fusion = AttributeFusion(self.config.get('attribute_fusion', {
-                'fusion_strategy': 'confidence_weighted'
-            }))
+            self.attribute_fusion = AttributeFusion(self.config.get('attribute_fusion'))
+            self.edge_case_handler = EdgeCaseHandler(self.config.get('edge_case_handler'))
+            self.preprocessor = ImagePreprocessor(self.config.get('image_preprocessor'))
+            self.cache_manager = AdvancedCacheManager(self.config.get('cache_manager'))
             
-            # Initialize scalability components
-            self.edge_case_handler = EdgeCaseHandler(self.config.get('edge_case_handler', {}))
-            self.preprocessor = ImagePreprocessor(self.config.get('image_preprocessor', {}))
-            self.cache_manager = AdvancedCacheManager(self.config.get('cache_manager', {}))
-            
-            # Initialize distributed processor if available
             try:
-                self.distributed_processor = DistributedProcessor(self.config.get('distributed_processor', {}))
+                self.distributed_processor = DistributedProcessor(self.config.get('distributed_processor'))
                 self.distributed_available = True
             except ImportError:
                 self.distributed_processor = None
@@ -88,59 +81,71 @@ class CharacterExtractionPipeline:
     
     def _create_pipeline(self):
         """Create the processing pipeline."""
-        # For now, we'll handle the pipeline manually for better control
-        # In a production system, you might want to use the Pipeline class
         pass
     
     def extract_from_image(self, image: Union[str, Path, Image.Image], 
                           tags: Optional[str] = None) -> CharacterAttributes:
         """Extract character attributes from a single image."""
         try:
-            # Prepare input data
+            if self.config.get('use_rl_primary', True):
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    result = loop.run_until_complete(
+                        self.rl_pipeline.extract_from_image(image, tags)
+                    )
+                    if result.confidence_score and result.confidence_score > 0.2:
+                        return result
+                finally:
+                    loop.close()
+            
+            return self._extract_from_image_fallback(image, tags)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to extract attributes: {e}")
+            return CharacterAttributes()
+    
+    def _extract_from_image_fallback(self, image: Union[str, Path, Image.Image], 
+                                   tags: Optional[str] = None) -> CharacterAttributes:
+        """Fallback extraction method using traditional pipeline."""
+        try:
             if isinstance(image, (str, Path)):
                 image_path = str(image)
                 if tags is None:
-                    # Try to find corresponding text file
                     text_path = Path(image_path).with_suffix('.txt')
                     if text_path.exists():
                         with open(text_path, 'r', encoding='utf-8') as f:
                             tags = f.read().strip()
                 
-                # Load image
                 pil_image = Image.open(image_path).convert('RGB')
             else:
                 pil_image = image
                 image_path = None
             
-            # Preprocess image and check edge cases
             preprocess_result = self.preprocessor.preprocess_image(pil_image)
-            if preprocess_result['should_skip']:
-                self.logger.info(f"Skipping image: {preprocess_result['preprocessing_info'].get('skip_reason', 'quality issues')}")
-                return CharacterAttributes()
+            processed_image = preprocess_result.get('processed_image', pil_image)
             
-            # Use preprocessed image
-            processed_image = preprocess_result['processed_image']
-            
-            # Analyze edge cases
             edge_analysis = self.edge_case_handler.analyze_image_content(processed_image)
-            if edge_analysis['recommendation'] == 'skip':
-                self.logger.info(f"Skipping image: {', '.join(edge_analysis['edge_cases'])}")
-                return CharacterAttributes()
             
-            # Create input data with processed image
+            quality_info = {
+                'edge_cases': edge_analysis.get('edge_cases', []),
+                'quality_score': edge_analysis.get('confidence', 0.0),
+                'recommendation': edge_analysis.get('recommendation', 'unknown'),
+                'is_good_quality': edge_analysis.get('recommendation') == 'process'
+            }
+            
+            if edge_analysis.get('edge_cases'):
+                self.logger.info(f"Edge cases detected: {edge_analysis.get('edge_cases')} - continuing with extraction")
+            
             input_data = {
                 'image': processed_image,
                 'tags': tags or '',
                 'image_path': image_path
             }
             
-            # Extract using tags
             tag_results = self.tag_parser.process(input_data)
-            
-            # Extract using CLIP
             clip_results = self.clip_analyzer.process(input_data)
             
-            # Extract using BLIP2 if available
             blip2_results = None
             if self.use_blip2 and hasattr(self, 'blip2_analyzer'):
                 try:
@@ -148,7 +153,6 @@ class CharacterExtractionPipeline:
                 except Exception as e:
                     self.logger.warning(f"BLIP2 analysis failed: {e}")
             
-            # Prepare fusion input
             fusion_input = {
                 'tag_results': tag_results,
                 'clip_results': clip_results,
@@ -158,7 +162,6 @@ class CharacterExtractionPipeline:
                 'blip2_confidences': {'overall': blip2_results.confidence_score or 0.0} if blip2_results else {'overall': 0.0}
             }
             
-            # Apply RL optimization if enabled
             if self.use_rl and hasattr(self, 'rl_optimizer'):
                 try:
                     rl_results = self.rl_optimizer.process(fusion_input)
@@ -166,21 +169,20 @@ class CharacterExtractionPipeline:
                 except Exception as e:
                     self.logger.warning(f"RL optimization failed: {e}")
             
-            # Fuse results
             final_attributes = self.attribute_fusion.process(fusion_input)
             
-            # Add edge case metadata
             if hasattr(final_attributes, 'metadata'):
                 final_attributes.metadata = {
                     'edge_cases': edge_analysis['edge_cases'],
                     'preprocessing_applied': preprocess_result['preprocessing_info']['steps_applied'],
-                    'confidence_adjustment': edge_analysis['confidence']
+                    'confidence_adjustment': edge_analysis['confidence'],
+                    'quality_info': quality_info
                 }
             
             return final_attributes
             
         except Exception as e:
-            self.logger.error(f"Failed to extract attributes: {e}")
+            self.logger.error(f"Fallback extraction failed: {e}")
             return CharacterAttributes()
     
     def extract_from_dataset_item(self, item: DatasetItem) -> ProcessingResult:
@@ -188,16 +190,13 @@ class CharacterExtractionPipeline:
         start_time = time.time()
         
         try:
-            # Check cache first
             cached_result = self.db.get_result(item.item_id)
             if cached_result:
                 self.logger.debug(f"Using cached result for {item.item_id}")
                 return cached_result
             
-            # Load data
             input_data = self.input_loader.process(item)
             
-            # Extract attributes
             attributes = self.extract_from_image(
                 input_data['image'], 
                 input_data['tags']
@@ -205,7 +204,6 @@ class CharacterExtractionPipeline:
             
             processing_time = time.time() - start_time
             
-            # Create result
             result = ProcessingResult(
                 item_id=item.item_id,
                 attributes=attributes,
@@ -213,7 +211,6 @@ class CharacterExtractionPipeline:
                 processing_time=processing_time
             )
             
-            # Store in database
             self.db.store_result(result)
             
             return result
@@ -229,7 +226,6 @@ class CharacterExtractionPipeline:
                 processing_time=processing_time
             )
             
-            # Store failed result too
             self.db.store_result(result)
             
             return result
@@ -237,6 +233,23 @@ class CharacterExtractionPipeline:
     def process_batch(self, items: List[DatasetItem], 
                      batch_size: int = 8) -> List[ProcessingResult]:
         """Process a batch of dataset items."""
+        if self.config.get('use_rl_primary', True):
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    results = loop.run_until_complete(
+                        self.rl_pipeline.process_batch(items)
+                    )
+                    
+                    success_rate = sum(1 for r in results if r.success) / len(results) if results else 0
+                    if success_rate > 0.5:
+                        return results
+                finally:
+                    loop.close()
+            except Exception as e:
+                self.logger.warning(f"RL batch processing failed: {e}, falling back to traditional")
+        
         results = []
         
         for i in range(0, len(items), batch_size):
@@ -257,80 +270,70 @@ class CharacterExtractionPipeline:
     
     def process_dataset(self, limit: Optional[int] = None) -> List[ProcessingResult]:
         """Process the entire dataset."""
-        # Discover dataset items
-        all_items = self.input_loader.discover_dataset_items()
-        
-        if limit:
-            all_items = all_items[:limit]
-        
-        self.logger.info(f"Processing {len(all_items)} items from dataset")
-        
-        return self.process_batch(all_items)
+        items = self.input_loader.get_sample_items(limit)
+        return self.process_batch(items)
     
     def get_sample_results(self, n: int = 10) -> List[Dict[str, Any]]:
         """Get sample results for demonstration."""
-        sample_items = self.input_loader.get_sample_items(n)
-        results = []
+        items = self.input_loader.get_sample_items(n)
+        results = self.process_batch(items)
         
-        for item in sample_items:
-            result = self.extract_from_dataset_item(item)
-            
-            if result.success:
-                results.append({
-                    'item_id': result.item_id,
-                    'image_path': item.image_path,
-                    'attributes': result.attributes.to_dict(),
-                    'confidence': result.attributes.confidence_score,
-                    'processing_time': result.processing_time
-                })
+        sample_results = []
+        for result in results:
+            sample_results.append({
+                'item_id': result.item_id,
+                'success': result.success,
+                'attributes': result.attributes.to_dict(),
+                'processing_time': result.processing_time,
+                'error': result.error_message if not result.success else None
+            })
         
-        return results
+        return sample_results
     
     def get_statistics(self) -> Dict[str, Any]:
         """Get pipeline statistics."""
-        db_stats = self.db.get_statistics()
+        stats = self.db.get_statistics()
         
-        # Add pipeline-specific stats
-        stats = {
-            'pipeline_config': {
-                'use_rl': self.use_rl,
-                'fusion_strategy': self.config.get('attribute_fusion', {}).get('fusion_strategy', 'confidence_weighted'),
-                'clip_model': self.config.get('clip_analyzer', {}).get('model_name', 'openai/clip-vit-base-patch32')
-            },
-            'database_stats': db_stats
+        rl_status = self.rl_pipeline.get_status() if hasattr(self, 'rl_pipeline') else {}
+        
+        return {
+            'total_processed': stats.get('total_count', 0),
+            'success_rate': stats.get('success_rate', 0.0),
+            'avg_processing_time': stats.get('avg_processing_time', 0.0),
+            'avg_confidence': stats.get('avg_confidence', 0.0),
+            'rl_status': rl_status
         }
-        
-        return stats
     
     def save_models(self):
         """Save trained models."""
-        if self.use_rl and hasattr(self, 'rl_optimizer'):
-            self.rl_optimizer.save_model()
-            self.logger.info("RL model saved")
+        if hasattr(self, 'rl_pipeline'):
+            self.rl_pipeline.rl_pipeline.save_training_data("rl_training_data.json")
     
     def benchmark_performance(self, n_samples: int = 50) -> Dict[str, Any]:
         """Benchmark pipeline performance."""
-        sample_items = self.input_loader.get_sample_items(n_samples)
-        
         start_time = time.time()
-        results = self.process_batch(sample_items)
-        total_time = time.time() - start_time
         
+        items = self.input_loader.get_sample_items(n_samples)
+        results = self.process_batch(items)
+        
+        total_time = time.time() - start_time
         successful_results = [r for r in results if r.success]
         
-        benchmark = {
-            'total_items': len(results),
-            'successful_items': len(successful_results),
-            'success_rate': len(successful_results) / len(results),
+        return {
+            'total_samples': n_samples,
+            'successful_extractions': len(successful_results),
+            'success_rate': len(successful_results) / n_samples,
             'total_time': total_time,
-            'avg_time_per_item': total_time / len(results),
-            'throughput_items_per_second': len(results) / total_time,
+            'avg_time_per_sample': total_time / n_samples,
             'avg_confidence': sum(r.attributes.confidence_score or 0 for r in successful_results) / len(successful_results) if successful_results else 0
         }
-        
-        return benchmark
+    
+    async def trigger_rl_retraining(self) -> bool:
+        """Trigger RL model retraining."""
+        if hasattr(self, 'rl_pipeline'):
+            return await self.rl_pipeline.trigger_retraining()
+        return False
 
-# Factory function for easy pipeline creation
 def create_pipeline(config: Optional[Dict[str, Any]] = None) -> CharacterExtractionPipeline:
     """Create a character extraction pipeline with default configuration."""
     default_config = {
@@ -345,6 +348,8 @@ def create_pipeline(config: Optional[Dict[str, Any]] = None) -> CharacterExtract
             'fusion_strategy': 'confidence_weighted'
         },
         'use_rl': True,
+        'use_rl_primary': True,
+        'rl_model_path': None,
         'database': {
             'db_path': './data/character_attributes.db',
             'enable_caching': True
@@ -352,7 +357,6 @@ def create_pipeline(config: Optional[Dict[str, Any]] = None) -> CharacterExtract
     }
     
     if config:
-        # Merge configs
         for key, value in config.items():
             if isinstance(value, dict) and key in default_config:
                 default_config[key].update(value)

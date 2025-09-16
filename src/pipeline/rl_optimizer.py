@@ -53,18 +53,42 @@ class RLOptimizer(PipelineStage):
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__("RLOptimizer", config)
         
-        # RL Configuration
-        self.state_dim = config.get('state_dim', 128) if config else 128
-        self.action_dim = config.get('action_dim', 64) if config else 64
-        self.hidden_dim = config.get('hidden_dim', 256) if config else 256
-        self.learning_rate = config.get('learning_rate', 0.001) if config else 0.001
-        self.epsilon = config.get('epsilon', 0.1) if config else 0.1
-        self.epsilon_decay = config.get('epsilon_decay', 0.995) if config else 0.995
-        self.epsilon_min = config.get('epsilon_min', 0.01) if config else 0.01
-        self.gamma = config.get('gamma', 0.95) if config else 0.95
-        self.batch_size = config.get('batch_size', 32) if config else 32
-        self.update_frequency = config.get('update_frequency', 100) if config else 100
+        # Action space: different extraction strategies
+        self.actions = {
+            0: 'conservative_clip',  # High confidence threshold for CLIP
+            1: 'aggressive_clip',    # Low confidence threshold for CLIP
+            2: 'tag_priority',       # Prioritize tag-based extraction
+            3: 'visual_priority',    # Prioritize visual extraction
+            4: 'ensemble_weighted',  # Weighted ensemble of methods
+            5: 'uncertainty_aware',  # Focus on uncertain predictions
+        }
         
+        # RL Configuration
+        if config:
+            self.state_dim = config.get('state_dim', 128)
+            self.action_dim = len(self.actions)
+            self.hidden_dim = config.get('hidden_dim', 256)
+            self.learning_rate = config.get('learning_rate', 0.001)
+            self.epsilon = config.get('epsilon', 0.1)
+            self.epsilon_decay = config.get('epsilon_decay', 0.995)
+            self.epsilon_min = config.get('epsilon_min', 0.01)
+            self.gamma = config.get('gamma', 0.95)
+            self.batch_size = config.get('batch_size', 32)
+            self.update_frequency = config.get('update_frequency', 100)
+            self.model_path = Path(config.get('model_path', './models/rl_optimizer.pth'))
+        else:
+            self.state_dim = 128
+            self.action_dim = len(self.actions)
+            self.hidden_dim = 256
+            self.learning_rate = 0.001
+            self.epsilon = 0.1
+            self.epsilon_decay = 0.995
+            self.epsilon_min = 0.01
+            self.gamma = 0.95
+            self.batch_size = 32
+            self.update_frequency = 100
+            self.model_path = Path('./models/rl_optimizer.pth')
+
         # Device
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
@@ -81,18 +105,7 @@ class RLOptimizer(PipelineStage):
         self.episode_rewards = []
         self.attribute_accuracy = defaultdict(list)
         
-        # Action space: different extraction strategies
-        self.actions = {
-            0: 'conservative_clip',  # High confidence threshold for CLIP
-            1: 'aggressive_clip',    # Low confidence threshold for CLIP
-            2: 'tag_priority',       # Prioritize tag-based extraction
-            3: 'visual_priority',    # Prioritize visual extraction
-            4: 'ensemble_weighted',  # Weighted ensemble of methods
-            5: 'uncertainty_aware',  # Focus on uncertain predictions
-        }
-        
         # Load saved model if exists
-        self.model_path = Path(config.get('model_path', './models/rl_optimizer.pth') if config else './models/rl_optimizer.pth')
         self.load_model()
     
     def _create_state_vector(self, clip_results: CharacterAttributes, tag_results: CharacterAttributes, 

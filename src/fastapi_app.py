@@ -16,8 +16,8 @@ from PIL import Image
 import io
 
 from character_pipeline import create_pipeline
-from pipeline.base import CharacterAttributes
-from pipeline.input_loader import DatasetItem
+from .pipeline.base import CharacterAttributes
+from .pipeline.input_loader import DatasetItem
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -116,6 +116,24 @@ async def extract_single(file: UploadFile = File(...)):
         # Clean up
         Path(temp_path).unlink(missing_ok=True)
         
+        # Extract quality information from metadata
+        quality_info = {}
+        if hasattr(attributes, 'metadata') and attributes.metadata:
+            quality_data = attributes.metadata.get('quality_info', {})
+            quality_info = {
+                "is_good_quality": quality_data.get('is_good_quality', True),
+                "quality_score": quality_data.get('quality_score', 1.0),
+                "edge_cases": quality_data.get('edge_cases', []),
+                "recommendation": quality_data.get('recommendation', 'process')
+            }
+        else:
+            quality_info = {
+                "is_good_quality": True,
+                "quality_score": 1.0,
+                "edge_cases": [],
+                "recommendation": "process"
+            }
+        
         # Convert to dictionary
         result = {
             "success": True,
@@ -131,7 +149,8 @@ async def extract_single(file: UploadFile = File(...)):
                 "dress": getattr(attributes, 'dress', None)
             },
             "confidence": getattr(attributes, 'confidence_score', 0.0),
-            "processing_time": 0.0  # Would be measured in production
+            "processing_time": 0.0,
+            "quality_info": quality_info
         }
         
         return JSONResponse(content=result)

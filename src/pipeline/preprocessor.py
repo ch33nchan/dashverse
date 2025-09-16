@@ -273,10 +273,16 @@ class ImagePreprocessor(PipelineStage):
         super().__init__("ImagePreprocessor", config)
         
         # Configuration
-        self.enable_style_normalization = config.get('enable_style_normalization', True) if config else True
-        self.enable_occlusion_handling = config.get('enable_occlusion_handling', True) if config else True
-        self.enable_quality_enhancement = config.get('enable_quality_enhancement', True) if config else True
-        self.target_size = config.get('target_size', (512, 512)) if config else (512, 512)
+        if config:
+            self.enable_style_normalization = config.get('enable_style_normalization', True)
+            self.enable_occlusion_handling = config.get('enable_occlusion_handling', True)
+            self.enable_quality_enhancement = config.get('enable_quality_enhancement', True)
+            self.target_size = config.get('target_size', (512, 512))
+        else:
+            self.enable_style_normalization = True
+            self.enable_occlusion_handling = True
+            self.enable_quality_enhancement = True
+            self.target_size = (512, 512)
         
         # Components
         self.style_normalizer = StyleNormalizer(config or {})

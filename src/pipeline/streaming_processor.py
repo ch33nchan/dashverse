@@ -12,9 +12,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import gc
 import psutil
 from dataclasses import asdict
+import ray
 
 from .base import PipelineStage, CharacterAttributes, ProcessingResult
 from .input_loader import DatasetItem
+from .retry_manager import RetryManager
 
 logger = logging.getLogger(__name__)
 
@@ -141,27 +143,43 @@ class StreamingDataLoader:
 class StreamingProcessor(PipelineStage):
     """Streaming processor for memory-efficient large-scale processing."""
     
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
-        super().__init__("StreamingProcessor", config)
-        
-        # Configuration
-        self.batch_size = config.get('batch_size', 32) if config else 32
-        self.num_workers = config.get('num_workers', 4) if config else 4
-        self.max_memory_gb = config.get('max_memory_gb', 8.0) if config else 8.0
-        self.checkpoint_interval = config.get('checkpoint_interval', 1000) if config else 1000
-        self.output_format = config.get('output_format', 'jsonl') if config else 'jsonl'
-        
-        # Components
-        self.data_loader = StreamingDataLoader(self.batch_size)
-        self.memory_monitor = MemoryMonitor(self.max_memory_gb)
-        
-        # State
-        self.processed_count = 0
-        self.success_count = 0
-        self.error_count = 0
-        
-        # Pipeline reference
-        self.pipeline = None
+    def __init__(self, config=None):
+        """
+        Initializes the streaming processor.
+
+        Args:
+            config (dict): Configuration dictionary.
+        """
+        if config:
+            self.pipeline = config.get("pipeline")
+            self.batch_size = config.get("batch_size", 16)
+            self.parallelism = config.get("parallelism", 4)
+            self.max_retries = config.get("max_retries", 3)
+            self.initial_retry_delay = config.get("initial_retry_delay", 1)
+            self.max_retry_delay = config.get("max_retry_delay", 60)
+            self.use_ray = config.get("use_ray", False)
+        else:
+            self.pipeline = None
+            self.batch_size = 16
+            self.parallelism = 4
+            self.max_retries = 3
+            self.initial_retry_delay = 1
+            self.max_retry_delay = 60
+            self.use_ray = False
+
+        if self.pipeline is None:
+            raise ValueError("A pipeline must be provided for processing.")
+
+        if self.use_ray:
+            if not ray.is_initialized():
+                ray.init(num_cpus=self.parallelism)
+            self.pipeline = ray.remote(self.pipeline)
+
+        self.retry_manager = RetryManager(
+            max_retries=self.max_retries,
+            initial_delay=self.initial_retry_delay,
+            max_delay=self.max_retry_delay,
+        )
     
     def set_pipeline(self, pipeline):
         """Set the character extraction pipeline."""

@@ -6,6 +6,8 @@ from transformers import CLIPProcessor, CLIPModel
 from PIL import Image
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
+import os
+from dotenv import load_dotenv
 
 from .base import PipelineStage, CharacterAttributes
 
@@ -28,10 +30,19 @@ class CLIPAnalyzer(PipelineStage):
     
     def _initialize_model(self):
         """Initialize CLIP model and processor."""
+        # Load environment variables from .env file
+        load_dotenv()
+        
         try:
             self.logger.info(f"Loading CLIP model: {self.model_name}")
-            self.model = CLIPModel.from_pretrained(self.model_name)
-            self.processor = CLIPProcessor.from_pretrained(self.model_name)
+            hf_token = os.environ.get("HF_TOKEN")
+            if hf_token:
+                self.model = CLIPModel.from_pretrained(self.model_name, token=hf_token)
+                self.processor = CLIPProcessor.from_pretrained(self.model_name, token=hf_token)
+            else:
+                self.logger.warning("HF_TOKEN not found in environment. Loading model without authentication.")
+                self.model = CLIPModel.from_pretrained(self.model_name)
+                self.processor = CLIPProcessor.from_pretrained(self.model_name)
             self.model.to(self.device)
             self.model.eval()
             self.logger.info(f"CLIP model loaded successfully on {self.device}")
@@ -161,7 +172,8 @@ class CLIPAnalyzer(PipelineStage):
                 text=prompts,
                 images=image,
                 return_tensors="pt",
-                padding=True
+                padding=True,
+                truncation=True
             )
             
             # Move to device
