@@ -20,6 +20,8 @@ tags:
 
 # Character Attribute Extraction Pipeline
 
+🚀 **[Try it live on Hugging Face Spaces!](https://huggingface.co/spaces/cheenchan/dashverse-srinivas)**
+
 I have built a production-ready character attribute extraction system that uses reinforcement learning to intelligently decide which tools to use for extracting character attributes from images. This system goes beyond traditional classification by treating attribute extraction as a resource-constrained sequential decision-making problem.
 
 ## What This Pipeline Does
@@ -152,7 +154,7 @@ This is a production-ready system that I have thoroughly tested:
    ```
 
 3. **Access the Web Interface**:
-   Open http://localhost:7860 in your browser
+   Open your localhost in your browser
 
 4. **Process Images**:
    - Upload single images for immediate analysis
