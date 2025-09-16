@@ -10,10 +10,14 @@ import pandas as pd
 import tempfile
 import asyncio
 
-from .character_pipeline import create_pipeline
-from .pipeline import CharacterAttributes
-from .pipeline.input_loader import DatasetItem
-from .rl_trainer import train_rl_pipeline
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from character_pipeline import create_pipeline
+from pipeline import CharacterAttributes
+from pipeline.input_loader import DatasetItem
+from rl_trainer import train_rl_pipeline
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
